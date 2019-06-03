@@ -1,5 +1,6 @@
 const express = require('express');
 const myUser = require('../models/users_schema');
+const complain = require('../models/complain');
 const routers = express.Router();
 const jwt = require('jsonwebtoken');
 const passport = require('passport');
@@ -35,6 +36,73 @@ routers.post('/email', (req, res, next) => {
     res.json({success:true, msg : 'OTP sent successfully\n'});
 });
  
+
+routers.post('/addComplain',(req,res,next)=>{
+  // console.log(req.body);
+  const time = new Date();
+  let newComp = new complain({
+    complainerName : req.body.complainerName,
+    complainName : req.body.complainName,
+    type : req.body.type,
+    city : req.body.city,
+    area : req.body.area,
+    time : time,
+    image : null,
+    status : false
+  });
+  console.log(newComp);
+  newComp.save((err)=>{
+      if(err){res.json({success:false , msg:'there is some problem .'});
+              console.log(err);        
+      }
+      else  res.json({success:true , msg:'Complain is successfully registred.'});
+  });
+});
+
+
+routers.get('/viewComplains/:name',(req,res,next)=>{
+  MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
+      let name = req.params.name;
+      console.log("view complains " + name);
+      var complains = [];
+      assert.equal(err, null);
+      var db1 = db.db('the_complain_app');
+          var cursor = db1.collection('complains').find({"complainerName":name});
+          cursor.forEach(
+          function(doc) {
+              complains.push(doc);
+
+           },
+          function(err) {
+              if(err) return err;
+              db.close();
+              console.log(complains);
+             res.json(complains);
+          }
+      );
+  });
+});
+
+routers.get('/viewComplains',(req,res,next)=>{
+
+  MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
+      var complains = [];
+      assert.equal(err, null);
+      var db1 = db.db('the_complain_app');
+          var cursor = db1.collection('complains').find();
+          cursor.forEach(
+          function(doc) {
+              complains.push(doc);
+           },
+          function(err) {
+              if(err) return err;
+              db.close();
+             res.json(complains);
+          }
+      );
+  });
+});
+
 routers.post('/register',(req,res,next)=>{
     
     let newUser = new myUser({
@@ -136,12 +204,12 @@ routers.get('/getUsers',(req,res,next)=>{
 routers.post('/authentication',(req,res,next)=>{
     const username = req.body.username;
     const password = req.body.password;
+
     // console.log("----")
-    // console.log("Password: "+ password);
+    console.log("Password: "+ password + "    " + username);
     myUser.getUserByUsername(username , (err,user)=>{
         if(err)console.log(err);
         if(!user)return res.json({success:false , msg:'User not found , Enter Valid Username ! '});
-        console.log("User.password: "+ user.password);
         myUser.comparePassword(password , user.password ,(err,isMatch)=>{
                 if(err){
                     //console.log("vvvvvvvv");

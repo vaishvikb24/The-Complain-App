@@ -31,7 +31,15 @@ const userSchema = mongoose.Schema({
          type : {
              type: String,
              required: true
-         }
+         },
+         category : {
+             type: String,
+             required: true
+         },
+         varified : {
+             type : Boolean,
+             required: true
+         }   
 });
 // for Renting_system
 const users_schema = module.exports = mongoose.model('users',userSchema);

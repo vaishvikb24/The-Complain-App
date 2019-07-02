@@ -9,6 +9,10 @@ const complainSchema = mongoose.Schema({
             type: String,
             required: true
          },
+         complainerId : {
+             type: String,
+             required: true
+         },
          type:{
             type: String,
             required: true
@@ -28,10 +32,20 @@ const complainSchema = mongoose.Schema({
          image: {
              type: Object
          },
+         completed: {
+             type: Boolean,
+             required: true
+         } ,
          status: {
+             type: Number,
+             required: true
+         },
+         assigned: {
              type: Boolean,
              required: true
          }
+   
+
 });
 const complain = module.exports = mongoose.model('complains',complainSchema);
 

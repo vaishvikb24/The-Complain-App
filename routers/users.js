@@ -6,16 +6,53 @@ const jwt = require('jsonwebtoken');
 const passport = require('passport');
 const config = require('../config/database');
 const mongoose = require('mongoose');
-mongoose.connect('mongodb://localhost:27017/renting_system');
+mongoose.connect('mongodb://localhost:27017/the_complain_app');
 var ObjectId = require('mongoose').Types.ObjectId; 
 var MongoClient = require('mongodb').MongoClient,
 assert = require('assert');
 var cmd = require('node-cmd');
+const assign = require('../models/assign');
 
+
+routers.post('/progressOfComplain/:id',(req,res)=>{
+    let cid = req.params.id;
+    console.log(cid);
+    console.log(req.body.status);
+    var MongoClient = require('mongodb').MongoClient;
+    var url = "mongodb://127.0.0.1:27017/";
+    MongoClient.connect(url, function(err, db) {
+    if (err) console.log(err);
+    var dbo = db.db('the_complain_app');
+    var myquery = { 
+        _id : new ObjectId(cid),
+    };
+    var newvalues = { $set: {status : req.body.number} };
+    dbo.collection("complains").updateOne(myquery, newvalues, function(err) {
+            if (err) console.log(err);
+    });
+    var myquery_ = {
+        complainId : cid
+    }
+    if(req.body.number == 100){
+      var newvalues = { $set: {completed : true} };
+      dbo.collection("complains").updateOne(myquery, newvalues, function(err) {
+        if (err) console.log(err);
+});
+    }
+    dbo.collection("assigns").updateOne(myquery_, newvalues,(err)=>{
+            if(err){
+              res.json({success:false , msg:'there is some problem in updating progression.'});
+              console.log(err);        
+            }
+            else  
+              res.json({success:true , msg:'Complain s progression successfully UPDATED !!! '});
+    });
+        db.close();
+    }); 
+
+});
 
 routers.post('/email', (req, res, next) => {
-
-    // console.log(req);
     sender_email = req.body.sender_email;
     sender_pw = req.body.sender_pw;
     receiver_email = req.body.receiver_email;
@@ -23,22 +60,60 @@ routers.post('/email', (req, res, next) => {
     console.log(sender_email + " "+ sender_pw + " "+ receiver_email + " "+ message);
     var pyProcess = cmd.get('python ./routers/sendOTP.py ' + sender_email + ' ' + sender_pw + ' ' + receiver_email + ' ' + message ,
               function(data, err, stderr) {
-                // console.log(data)
-                // console.log("**********")
-                // console.log(err)
                 if (!err) {
-                  console.log("data from python script " + data)
+                  console.log("data from python script " + data);
+                  res.json({success:true, msg : 'OTP sent successfully\n'});
                 } else {
-                  console.log("python script cmd error: " + err)
+                  console.log("python script cmd error: " + err);
+                  res.json({success:false, msg : 'Error in Sending Mail ! \n'});
                   }
                 }
               );
-    res.json({success:true, msg : 'OTP sent successfully\n'});
 });
  
 
+routers.get('/getUsers',(req,res,next)=>{
+
+  MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
+      var users = [];
+      assert.equal(err, null);
+      var db1 = db.db('the_complain_app');
+          var cursor = db1.collection('users').find();
+          cursor.forEach(
+          function(doc) {
+              users.push(doc);
+           },
+          function(err) {
+              if(err) return err;
+              db.close();
+             res.json(users);
+          }
+      );
+  });
+});
+
+routers.get('/getAsscomplains/:wid',(req,res,next)=>{
+  let wid = req.params.wid;
+  console.log(wid);
+  MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
+      var users = [];
+      assert.equal(err, null);
+      var db1 = db.db('the_complain_app');
+          var cursor = db1.collection('assigns').find({"workerId": wid});
+          cursor.forEach(
+          function(doc) {
+              users.push(doc);
+           },
+          function(err) {
+              if(err) return err;
+              db.close();
+             res.json(users);
+          }
+      );
+  });
+});
+
 routers.post('/addComplain',(req,res,next)=>{
-  // console.log(req.body);
   const time = new Date();
   let newComp = new complain({
     complainerName : req.body.complainerName,
@@ -46,9 +121,13 @@ routers.post('/addComplain',(req,res,next)=>{
     type : req.body.type,
     city : req.body.city,
     area : req.body.area,
+    complainerId : req.body.complainerId,
     time : time,
     image : null,
-    status : false
+    assigned : false,
+    status: 0,
+    completed: false,
+    worker : []
   });
   console.log(newComp);
   newComp.save((err)=>{
@@ -59,25 +138,101 @@ routers.post('/addComplain',(req,res,next)=>{
   });
 });
 
+routers.post('/assignComplainToWorker',(req,res,next)=>{
+  console.log("Assigning complain to worker");
+  var MongoClient = require('mongodb').MongoClient;
+  var url = "mongodb://127.0.0.1:27017/";
+  MongoClient.connect(url, function(err, db) {
+  if (err) console.log(err);
+  var dbo = db.db('the_complain_app');
+  var myquery = { 
+      _id : new ObjectId(req.body.complainId),
+  };
+  var newvalues = { $set: {assigned : true} };
+  dbo.collection("complains").updateOne(myquery, newvalues, function(err) {
+          if (err) console.log(err);
+  });
+      db.close();
+  }); 
+
+  const time = new Date();
+  let newAssign = new assign({
+    complainerName : req.body.complainerName,
+    complainName : req.body.complainName,
+    complainerId : req.body.complainerId,
+    complainId : req.body.complainId,
+    time : time,
+    status: 0,
+    type: req.body.type,
+    workerId : req.body.workerId,
+    workerName : req.body.workerName
+  });
+  // console.log(newAssign);
+  newAssign.save((err)=>{
+      if(err){res.json({success:false , msg:'There is some problem in assingning Try agian later.'});
+              console.log(err);        
+      }
+      else  res.json({success:true , msg:'Workers complain has been successfully assigned. Thank You !!'});
+  });
+});
 
 routers.get('/viewComplains/:name',(req,res,next)=>{
   MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
       let name = req.params.name;
-      console.log("view complains " + name);
+      // console.log("view complains " + name);
       var complains = [];
       assert.equal(err, null);
       var db1 = db.db('the_complain_app');
-          var cursor = db1.collection('complains').find({"complainerName":name});
+        if(name != "GiveMeAllComplains"){
+          var cursor = db1.collection('complains').find({"complainerId":name});
+          cursor.forEach(
+            function(doc) {
+                complains.push(doc);
+
+            },
+            function(err) {
+                if(err) return err;
+                db.close();
+                console.log(complains);
+              res.json(complains);
+            }
+          );
+        }else{
+          var cursor = db1.collection('complains').find();
+          cursor.forEach(
+            function(doc) {
+                complains.push(doc);
+            },
+            function(err) {
+                if(err) return err;
+                db.close();
+                console.log(complains);
+              res.json(complains);
+            }
+          );
+        }
+
+  });
+});
+
+routers.get('/viewComplainById/:id',(req,res,next)=>{
+  MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
+      let name = req.params.id;
+      let myid =  new ObjectId(name);
+      console.log("view complain with id " + name + "             " + myid);
+      var complains = null;
+      assert.equal(err, null);
+      var db1 = db.db('the_complain_app');
+          var cursor = db1.collection('complains').find({"_id":myid});
           cursor.forEach(
           function(doc) {
-              complains.push(doc);
-
+              complains = doc;
            },
           function(err) {
               if(err) return err;
               db.close();
               console.log(complains);
-             res.json(complains);
+              res.json(complains);
           }
       );
   });
@@ -104,7 +259,6 @@ routers.get('/viewComplains',(req,res,next)=>{
 });
 
 routers.post('/register',(req,res,next)=>{
-    
     let newUser = new myUser({
         name: req.body.name,
         email: req.body.email,
@@ -112,10 +266,11 @@ routers.post('/register',(req,res,next)=>{
         username: req.body.username,
         url: req.body.url,
         phoneNum: req.body.phoneNum,
-        type : "Citizen"
+        type : req.body.acc_type,
+        category : req.body.category,
+        varified : false,
+        complains : []
     }); 
-    // /console.log("reguster");
-    // console.log(newUser);
     myUser.addUser(newUser,(err,myUser)=>{
         if(err){res.json({ success:false , msg:'failed to connect : '});}
         else{res.json({success:true ,msg:'connected succesfully '});
@@ -134,7 +289,7 @@ routers.post('/changePassword',(req,res,next)=>{
     console.log(req.body);
     MongoClient.connect(url, function(err, db) {
         if (err) console.log(err);
-        var dbo = db.db('renting_system');
+        var dbo = db.db('the_complain_app');
         // console.log(req.body);
         dbo.collection('users').find({username : req.body.username}).toArray((err, users) => {
             if(err) {
@@ -183,10 +338,10 @@ routers.post('/changePassword',(req,res,next)=>{
 
 routers.get('/getUsers',(req,res,next)=>{
 
-    MongoClient.connect('mongodb://localhost:27017/renting_system', function(err, db) {
+    MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
         var users = [];
         assert.equal(err, null);
-        var db1 = db.db('renting_system');
+        var db1 = db.db('the_complain_app');
             var cursor = db1.collection('users').find();
             cursor.forEach(
             function(doc) {
@@ -245,7 +400,7 @@ const multer = require('multer');
 const GridFsStorage = require('multer-gridfs-storage');
 const Grid = require('gridfs-stream');
 // Mongo URI
-const mongoURI = 'mongodb://localhost:27017/renting_system';
+const mongoURI = 'mongodb://localhost:27017/the_complain_app';
 // Create mongo connection
 const conn = mongoose2.createConnection(mongoURI);
 // Init gfs

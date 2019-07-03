@@ -13,6 +13,58 @@ assert = require('assert');
 var cmd = require('node-cmd');
 const assign = require('../models/assign');
 
+routers.get('/getNumbers',(req,res)=>{
+  var MongoClient = require('mongodb').MongoClient;
+  var url = "mongodb://127.0.0.1:27017/";
+  MongoClient.connect(url, function(err, db) {
+  if (err) console.log(err);
+  var dbo = db.db('the_complain_app');
+  var totalComplains = 0;
+  var totalComplainRoad  = 0;
+  var completed = 0;
+  dbo.collection("complains").find().count((err,count)=>{
+      if(err)console.log(err);
+      else{
+        // console.log("Total " + count);
+        totalComplains = count;
+      }
+  });
+  dbo.collection("complains").find({"type":"Road"}).count((err,count2)=>{
+    if(err)console.log(err);
+    else{
+      // console.log("Road " + count2);
+      totalComplainsRoad = count2;
+
+    }
+  });
+  dbo.collection("complains").find({"completed":true}).count((err,count4)=>{
+    if(err)console.log(err);
+    else{
+      // console.log("Completed" + count4);
+      completed = count4;
+
+    }
+  });
+  dbo.collection("complains").find({"type":"Water"}).count((err,count3)=>{
+    if(err)console.log(err);
+    else{
+      // console.log("Water " + count3);
+      var totalComplainsWater = count3;
+      // console.log(totalComplains  + " " + totalComplainsRoad + " " + totalComplainsWater + " " + completed);
+      var obj = {
+        "total" : totalComplains,
+        "Water" : totalComplainsWater,
+        "Road" : totalComplainsRoad,
+        "Completed" : completed
+      }
+      res.json(obj);
+    }
+  });
+
+
+  db.close();
+  }); 
+});
 
 routers.post('/progressOfComplain/:id',(req,res)=>{
     let cid = req.params.id;

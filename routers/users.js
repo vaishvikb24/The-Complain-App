@@ -1,6 +1,7 @@
 const express = require('express');
 const myUser = require('../models/users_schema');
 const complain = require('../models/complain');
+const paypal = require('paypal-rest-sdk');
 const routers = express.Router();
 const jwt = require('jsonwebtoken');
 const passport = require('passport');
@@ -85,11 +86,12 @@ routers.post('/progressOfComplain/:id',(req,res)=>{
     var myquery_ = {
         complainId : cid
     }
+
     if(req.body.number == 100){
-      var newvalues = { $set: {completed : true} };
-      dbo.collection("complains").updateOne(myquery, newvalues, function(err) {
+      var newvalues_ = { $set: {completed : true} };
+      dbo.collection("complains").updateOne(myquery, newvalues_, function(err) {
         if (err) console.log(err);
-});
+    });
     }
     dbo.collection("assigns").updateOne(myquery_, newvalues,(err)=>{
             if(err){
@@ -179,6 +181,12 @@ routers.post('/addComplain',(req,res,next)=>{
     assigned : false,
     status: 0,
     completed: false,
+    source : "The Complain APP",
+    Location : {
+      latitude : req.body.latitude,
+      longitude: req.body.longitude
+    },
+    payment : false,
     worker : []
   });
   console.log(newComp);
@@ -581,3 +589,132 @@ routers.delete('/files/:id', (req, res) => {
   });
 });
 
+paypal.configure({
+  'mode': 'sandbox', //sandbox or live
+  'client_id': 'ARnIB36gmVQVudXCSEvGUf_JNN35-jgG2F-bMYgwtnItSsVhRPGxqNL0bHediVCuGvvV_LgZwdVu1NCg',
+  'client_secret': 'EKjXTh_U4R4C1YOR_mCzn9RdaDulT4W9exmGwEXYilCFND0e7_4Oz1il5BGnl3bpG82Iugvpm6yu653y'
+});
+
+routers.post('/pay', (req, res) => {
+  // console.log("paying");
+
+  const create_payment_json = {
+    "intent": "sale",
+    "payer": {
+        "payment_method": "paypal"
+    },
+    "redirect_urls": {
+        "return_url": "http://localhost:4000/users/success/"+req.body.price,
+        "cancel_url": "http://localhost:4000/users/cancel"
+    },
+    "transactions": [{
+        "item_list": {
+            "items": [{
+                "name": req.body.name,
+                "sku": "001",
+                "price": req.body.price,
+                "currency": "USD",
+                "quantity": 1
+            }]
+        },
+        "amount": {
+            "currency": "USD",
+            "total": req.body.price
+        },
+        "description": req.body.discription
+    }]
+};
+
+paypal.payment.create(create_payment_json, function (error, payment) {
+  if (error) {
+      console.log(error);
+      res.send({url : 'you should have internet connection for payment',
+          success: false});
+      // console.log(err)or;
+  } else {
+
+      for(let i = 0;i < payment.links.length;i++){
+        if(payment.links[i].rel === 'approval_url'){
+          // console.log("URL : " + payment.links[i].hrefs);  
+          res.send({url :payment.links[i].href,
+                    success: true});
+        }
+      }
+  }
+});
+
+});
+
+routers.get('/success/:money', (req, res) => {
+  let money_ = req.param("money"); 
+  // console.log(money_); 
+  const payerId = req.query.PayerID;
+  const paymentId = req.query.paymentId;
+  const execute_payment_json = {
+    "payer_id": payerId,
+    "transactions": [{
+        "amount": {
+            "currency": "USD",
+            "total": money_
+        }
+    }]
+  };
+
+  paypal.payment.execute(paymentId, execute_payment_json, function (error, payment) {
+    if (error) {
+        console.log(error.response);
+        console.log(err);
+    } else {
+      MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
+          var db1 = db.db('the_complain_app');
+          let payment_ = db1.collection("payment"); 
+          payment_.insertOne(payment , (err,res)=>{
+              if(err){
+                  console.log("Err " + err);
+              }else {
+                  console.log("REs " + res);
+              }
+          });      
+          console.log(payment.transactions[0].item_list.items[0].name);
+          var newvalues2 =  { $set: {payment : true} }
+          var myquery = { 
+            _id : new ObjectId(payment.transactions[0].item_list.items[0].name),
+        };
+          db1.collection("complains").updateOne(myquery,newvalues2,(err)=>{
+                  if(err) console.log(err);
+          });
+
+      });
+      // console.log(payment.id);
+      res.redirect("http://localhost:4200/payment/" + payment.id);
+    }
+});
+});
+
+routers.get('/cancel', (req, res) => res.send('Cancelled'));
+
+routers.get('/paymentDetails/:id',(req,res,next)=>{
+  // console.log("start");  
+  let id_ = req.param("id"); 
+  // console.log(id_);
+  MongoClient.connect('mongodb://localhost:27017/the_complain_app', function(err, db) {
+
+      var users = null;
+      assert.equal(err, null);
+      var db1 = db.db('the_complain_app');
+          var cursor = db1.collection('payment').find();
+          cursor.forEach(
+          function(doc) {
+              // console.log(doc);
+              if(doc.id == id_)
+                  users = doc;
+                  console.log(users);
+           },
+          function(err) {
+              if(err) return err;
+              db.close();
+             res.json(users);
+          }
+      );
+  });
+});

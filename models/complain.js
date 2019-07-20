@@ -43,6 +43,16 @@ const complainSchema = mongoose.Schema({
          assigned: {
              type: Boolean,
              required: true
+         },
+         source : {
+             type: String
+         },
+         Location:{
+             latitude : {type : Number},
+             longitude : {type : Number}
+         },
+         payment:{
+             type: Boolean
          }
    
 
